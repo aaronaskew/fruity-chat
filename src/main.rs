@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
 use futures_lite::StreamExt;
-use iroh::{Endpoint, endpoint::presets, protocol::Router};
+use iroh::{Endpoint, EndpointId, endpoint::presets, protocol::Router};
 use iroh_gossip::{
-    api::{Event, GossipReceiver},
+    api::{Event, GossipReceiver, GossipSender},
     net::Gossip,
     proto::TopicId,
 };
@@ -113,13 +113,15 @@ async fn main() -> Result<()> {
     println!("> connected!");
 
     // broadcast our name, if set
-    if let Some(name) = args.name {
-        let message = Message::new(MessageBody::AboutMe {
-            from: endpoint.id(),
-            name,
-        });
-        sender.broadcast(message.to_vec().into()).await?;
-    }
+    broadcast_name(&sender, args.name, endpoint.id()).await?;
+
+    // if let Some(name) = args.name {
+    //     let message = Message::new(MessageBody::AboutMe {
+    //         from: endpoint.id(),
+    //         name,
+    //     });
+    //     sender.broadcast(message.to_vec().into()).await?;
+    // }
 
     // subscribe and print loop
     tokio::spawn(subscribe_loop(receiver));
@@ -194,4 +196,21 @@ fn input_loop(line_tx: tokio::sync::mpsc::Sender<String>) -> Result<()> {
         line_tx.blocking_send(buffer.clone())?;
         buffer.clear();
     }
+}
+
+async fn broadcast_name(
+    sender: &GossipSender,
+    name: Option<String>,
+    endpoint_id: EndpointId,
+) -> Result<()> {
+    // broadcast our name, if set
+    if let Some(name) = name {
+        let message = Message::new(MessageBody::AboutMe {
+            from: endpoint_id,
+            name,
+        });
+        sender.broadcast(message.to_vec().into()).await?;
+    }
+
+    Ok(())
 }
