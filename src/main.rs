@@ -133,7 +133,7 @@ async fn main() -> Result<()> {
     // listen for lines that we have typed to be sent from `stdin`
     while let Some(text) = line_rx.recv().await {
         // fruitify the message first
-        let fruit_len = rand::random_range(0..10);
+        let fruit_len = rand::random_range(1..=3);
         let text = format!(
             "{} {} {}",
             rand_fruit(fruit_len),
