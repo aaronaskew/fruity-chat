@@ -1,32 +1,34 @@
-use std::{collections::HashMap, fmt, str::FromStr};
-
 use anyhow::Result;
 use clap::Parser;
-use fruity_chat::fruit::rand_fruit;
 use futures_lite::StreamExt;
-use iroh::{Endpoint, EndpointAddr, EndpointId, endpoint::presets, protocol::Router};
+use iroh::{Endpoint, endpoint::presets, protocol::Router};
 use iroh_gossip::{
     api::{Event, GossipReceiver},
     net::Gossip,
     proto::TopicId,
 };
 use iroh_services::Client;
-use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, str::FromStr};
 
-/// fruity-chat - It's like regular chat but fruitier
+mod fruit;
+mod message;
+mod ticket;
+
+use crate::{
+    fruit::random_fruit,
+    message::{Message, MessageBody},
+    ticket::Ticket,
+};
+
+/// 🍓 fruity-chat - It's like regular chat but fruitier 🍎
 ///
-/// This broadcasts unsigned messages over iroh-gossip.
+/// 🍉 This broadcasts unsigned messages over iroh-gossip. 🥥
 ///
-/// 🍎🍒🍎🥭🍓🍇🥥🫐🍉🍐🍋‍🟩🍎🍍🍐🍏🍑🍈🥝🥝🍉🍏🍑🍌🍅🥥
+/// 🍌 By default a new endpoint id is created when starting the example. 🍑
 ///
-/// By default a new endpoint id is created when starting the example.
-///
-/// 🍎🥭🍓🍇🍎🍒🍎🥭🍓🍇🥥🫐🍉🍐🍋‍🟩🍎🍑🍈🥝🥝🍉🍏🍑🍌🍅🥥🍋‍🟩🍎🍍🍐🍏🍑
-///
-/// By default, we use the default n0 address lookup services to dial by `EndpointId`.
-///
-/// 🍎🥭🍓🍇🥥🫐🍉🍐🍋‍🟩🍎🍑🍈🥝🥝🍉🍏🍑🍌🍅🥥🍋‍🟩🍎🍍🍐🍏🍑🍓🍇🥥🫐🍉🍐🍐🍋‍🟩🍎🍑🍈🥝🥝🍉
+/// 🍇 By default, we use the default n0 address lookup services to dial by `EndpointId`. 🥝
 #[derive(Parser, Debug)]
+#[command(version)]
 struct Args {
     /// Set your nickname.
     #[clap(short, long)]
@@ -134,7 +136,7 @@ async fn main() -> Result<()> {
     while let Some(text) = line_rx.recv().await {
         // fruitify the message first
         let fruit_len = rand::random_range(1..=3);
-        let text = format!("{} {}", rand_fruit(fruit_len), text,);
+        let text = format!("{} {}", random_fruit(fruit_len), text,);
 
         // create a message from the text
         let message = Message::new(MessageBody::Message {
@@ -149,35 +151,6 @@ async fn main() -> Result<()> {
     router.shutdown().await?;
 
     Ok(())
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Message {
-    body: MessageBody,
-    nonce: [u8; 16],
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum MessageBody {
-    AboutMe { from: EndpointId, name: String },
-    Message { from: EndpointId, text: String },
-}
-
-impl Message {
-    fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        serde_json::from_slice(bytes).map_err(Into::into)
-    }
-
-    pub fn new(body: MessageBody) -> Self {
-        Self {
-            body,
-            nonce: rand::random(),
-        }
-    }
-
-    pub fn to_vec(&self) -> Vec<u8> {
-        serde_json::to_vec(self).expect("serde_json::to_vec is infallible")
-    }
 }
 
 // Handle incoming events
@@ -220,44 +193,5 @@ fn input_loop(line_tx: tokio::sync::mpsc::Sender<String>) -> Result<()> {
         stdin.read_line(&mut buffer)?;
         line_tx.blocking_send(buffer.clone())?;
         buffer.clear();
-    }
-}
-
-// add the `Ticket` code to the bottom of the main file
-#[derive(Debug, Serialize, Deserialize)]
-struct Ticket {
-    topic: TopicId,
-    endpoints: Vec<EndpointAddr>,
-}
-
-impl Ticket {
-    /// Deserialize from a slice of bytes to a Ticket.
-    fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        serde_json::from_slice(bytes).map_err(Into::into)
-    }
-
-    /// Serialize from a `Ticket` to a `Vec` of bytes.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        serde_json::to_vec(self).expect("serde_json::to_vec is infallible")
-    }
-}
-
-// The `Display` trait allows us to use the `to_string`
-// method on `Ticket`.
-impl fmt::Display for Ticket {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut text = data_encoding::BASE32_NOPAD.encode(&self.to_bytes()[..]);
-        text.make_ascii_lowercase();
-        write!(f, "{}", text)
-    }
-}
-
-// The `FromStr` trait allows us to turn a `str` into
-// a `Ticket`
-impl FromStr for Ticket {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = data_encoding::BASE32_NOPAD.decode(s.to_ascii_uppercase().as_bytes())?;
-        Self::from_bytes(&bytes)
     }
 }
