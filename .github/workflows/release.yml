@@ -1,0 +1,54 @@
+name: Release
+
+# This workflow only runs when you push a tag starting with "v" (e.g., v1.0.0)
+on:
+  push:
+    tags:
+      - "v*"
+
+# Required to create releases and upload assets
+permissions:
+  contents: write
+
+jobs:
+  # 1. Create the GitHub Release first
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+
+  # 2. Compile and upload the binaries for each OS
+  build-and-upload:
+    name: Build and Upload
+    needs: create-release # Wait for the release to be created
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu # Linux Intel/AMD
+          - os: macos-latest
+            target: x86_64-apple-darwin # Mac Intel
+          - os: macos-latest
+            target: aarch64-apple-darwin # Mac Apple Silicon (M1/M2/M3)
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc # Windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and Upload Asset
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: fruity-chat
+          target: ${{ matrix.target }}
+          # Also archives extra files like licenses and readmes
+          tar: unix
+          zip: windows
+          include: LICENSE, README.md
+          token: ${{ secrets.GITHUB_TOKEN }}
