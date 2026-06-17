@@ -134,12 +134,7 @@ async fn main() -> Result<()> {
     while let Some(text) = line_rx.recv().await {
         // fruitify the message first
         let fruit_len = rand::random_range(1..=3);
-        let text = format!(
-            "{} {} {}",
-            rand_fruit(fruit_len),
-            text,
-            rand_fruit(fruit_len)
-        );
+        let text = format!("{} {}", rand_fruit(fruit_len), text,);
 
         // create a message from the text
         let message = Message::new(MessageBody::Message {
