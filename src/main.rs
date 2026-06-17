@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt, str::FromStr};
 
 use anyhow::Result;
 use clap::Parser;
+use fruity_chat::fruit::rand_fruit;
 use futures_lite::StreamExt;
 use iroh::{Endpoint, EndpointAddr, EndpointId, endpoint::presets, protocol::Router};
 use iroh_gossip::{
@@ -12,13 +13,19 @@ use iroh_gossip::{
 use iroh_services::Client;
 use serde::{Deserialize, Serialize};
 
-/// fruity-chat
+/// fruity-chat - It's like regular chat but fruitier
 ///
 /// This broadcasts unsigned messages over iroh-gossip.
 ///
+/// 🍎🍒🍎🥭🍓🍇🥥🫐🍉🍐🍋‍🟩🍎🍍🍐🍏🍑🍈🥝🥝🍉🍏🍑🍌🍅🥥
+///
 /// By default a new endpoint id is created when starting the example.
 ///
+/// 🍎🥭🍓🍇🍎🍒🍎🥭🍓🍇🥥🫐🍉🍐🍋‍🟩🍎🍑🍈🥝🥝🍉🍏🍑🍌🍅🥥🍋‍🟩🍎🍍🍐🍏🍑
+///
 /// By default, we use the default n0 address lookup services to dial by `EndpointId`.
+///
+/// 🍎🥭🍓🍇🥥🫐🍉🍐🍋‍🟩🍎🍑🍈🥝🥝🍉🍏🍑🍌🍅🥥🍋‍🟩🍎🍍🍐🍏🍑🍓🍇🥥🫐🍉🍐🍐🍋‍🟩🍎🍑🍈🥝🥝🍉
 #[derive(Parser, Debug)]
 struct Args {
     /// Set your nickname.
@@ -125,6 +132,9 @@ async fn main() -> Result<()> {
     println!("> type a message and hit enter to broadcast...");
     // listen for lines that we have typed to be sent from `stdin`
     while let Some(text) = line_rx.recv().await {
+        // fruitify the message first
+        let text = format!("{}\n{}", text, rand_fruit(text.len() / 2));
+
         // create a message from the text
         let message = Message::new(MessageBody::Message {
             from: endpoint.id(),
