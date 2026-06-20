@@ -9,6 +9,7 @@ use iroh_gossip::{
 };
 use iroh_services::Client;
 use std::{collections::HashMap, str::FromStr};
+use tokio::sync::mpsc::Receiver;
 
 mod fruit;
 mod message;
@@ -113,18 +114,19 @@ async fn main() -> Result<()> {
     println!("> connected!");
 
     // broadcast our name, if set
-    broadcast_name(&sender, args.name, endpoint.id()).await?;
+    broadcast_name(&sender, &args.name, endpoint.id()).await?;
 
-    // if let Some(name) = args.name {
-    //     let message = Message::new(MessageBody::AboutMe {
-    //         from: endpoint.id(),
-    //         name,
-    //     });
-    //     sender.broadcast(message.to_vec().into()).await?;
-    // }
+    // spawn a thread to re-broadcast our AboutMe if needed
+    let (about_me_tx, about_me_rx) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(re_broadcast_name_loop(
+        about_me_rx,
+        sender.clone(),
+        args.name.clone(),
+        endpoint.id(),
+    ));
 
     // subscribe and print loop
-    tokio::spawn(subscribe_loop(receiver));
+    tokio::spawn(subscribe_loop(receiver, about_me_tx));
 
     // spawn an input thread that reads stdin
     // create a multi-provider, single-consumer channel
@@ -156,7 +158,10 @@ async fn main() -> Result<()> {
 }
 
 // Handle incoming events
-async fn subscribe_loop(mut receiver: GossipReceiver) -> Result<()> {
+async fn subscribe_loop(
+    mut receiver: GossipReceiver,
+    about_me_tx: tokio::sync::mpsc::Sender<bool>,
+) -> Result<()> {
     // keep track of the mapping between `EndpointId`s and names
     let mut names = HashMap::new();
     // iterate over all events
@@ -167,11 +172,13 @@ async fn subscribe_loop(mut receiver: GossipReceiver) -> Result<()> {
             // message type:
             match Message::from_bytes(&msg.content)?.body {
                 MessageBody::AboutMe { from, name } => {
-                    // if it's an `AboutMe` message
-                    // add an entry into the map
-                    // and print the name
-                    names.insert(from, name.clone());
-                    println!("> {} is now known as {}", from.fmt_short(), name);
+                    // If we haven't already seen this AboutMe message,
+                    // add to names, respond by broadcasting our own,
+                    // and add to names map.
+                    if names.insert(from, name.clone()).is_none() {
+                        about_me_tx.send(true).await?;
+                        println!("> {} is now known as {}", from.fmt_short(), name);
+                    }
                 }
                 MessageBody::Message { from, text } => {
                     // if it's a `Message` message,
@@ -200,16 +207,29 @@ fn input_loop(line_tx: tokio::sync::mpsc::Sender<String>) -> Result<()> {
 
 async fn broadcast_name(
     sender: &GossipSender,
-    name: Option<String>,
+    name: &Option<String>,
     endpoint_id: EndpointId,
 ) -> Result<()> {
     // broadcast our name, if set
     if let Some(name) = name {
         let message = Message::new(MessageBody::AboutMe {
             from: endpoint_id,
-            name,
+            name: name.clone(),
         });
         sender.broadcast(message.to_vec().into()).await?;
+    }
+
+    Ok(())
+}
+
+async fn re_broadcast_name_loop(
+    mut about_me_rx: Receiver<bool>,
+    sender: GossipSender,
+    name: Option<String>,
+    endpoint_id: EndpointId,
+) -> Result<()> {
+    while about_me_rx.recv().await.is_some() {
+        broadcast_name(&sender, &name, endpoint_id).await?;
     }
 
     Ok(())
